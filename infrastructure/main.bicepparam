@@ -6,3 +6,6 @@ param appServicePlanSku = 'B1'
 param redisSku = 'Basic'
 param redisCapacity = 0
 param apiKey = ''
+param visualCrossingApiKey = ''
+param accuWeatherApiKey = ''
+param weatherApiApiKey = ''

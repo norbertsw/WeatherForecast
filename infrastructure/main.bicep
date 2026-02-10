@@ -22,6 +22,18 @@ param location string = resourceGroup().location
 @secure()
 param apiKey string
 
+@description('OpenWeatherMap API key')
+@secure()
+param visualCrossingApiKey string
+
+@description('AccuWeather API key')
+@secure()
+param accuWeatherApiKey string
+
+@description('WeatherAPI.com API key')
+@secure()
+param weatherApiApiKey string
+
 @description('App Service Plan SKU')
 @allowed([
   'F1'
@@ -188,6 +200,30 @@ resource secretApiKey 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
   name: 'ApiKey'
   properties: {
     value: apiKey
+  }
+}
+
+resource secretVisualCrossingApiKey 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
+  parent: keyVault
+  name: 'WeatherProviders--VisualCrossing--ApiKey'
+  properties: {
+    value: visualCrossingApiKey
+  }
+}
+
+resource secretAccuWeatherApiKey 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
+  parent: keyVault
+  name: 'WeatherProviders--AccuWeather--ApiKey'
+  properties: {
+    value: accuWeatherApiKey
+  }
+}
+
+resource secretWeatherApiApiKey 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
+  parent: keyVault
+  name: 'WeatherProviders--WeatherApi--ApiKey'
+  properties: {
+    value: weatherApiApiKey
   }
 }
 

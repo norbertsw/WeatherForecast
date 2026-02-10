@@ -75,6 +75,9 @@ jobs:
           parameters: >
             infrastructure/main.bicepparam
             apiKey=${{ secrets.API_KEY }}
+            visualCrossingApiKey=${{ secrets.VISUALCROSSING_API_KEY }}
+            accuWeatherApiKey=${{ secrets.ACCUWEATHER_API_KEY }}
+            weatherApiApiKey=${{ secrets.WEATHERAPI_API_KEY }}
           failOnStdErr: true
           scope: resourcegroup
 
