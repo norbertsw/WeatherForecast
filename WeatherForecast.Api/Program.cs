@@ -1,3 +1,4 @@
+using Azure.Identity;
 using FluentValidation;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
@@ -6,6 +7,10 @@ using WeatherForecast.Api.Weather;
 using WeatherForecast.Api.Weather.Forecast;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.AddAzureKeyVault(
+    new Uri(builder.Configuration["KeyVaultUri"]!),
+    new DefaultAzureCredential());
 
 builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(options =>
@@ -19,13 +24,22 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueLimit = 0;
     });
 });
-builder.Services.AddScoped<IValidator<WeatherForecastRequest>, ForecastRequestValidator>();
-builder.Services.AddHealthChecks();
-builder.Services.AddOpenApi(options =>
-{
-    options.AddDocumentTransformer<ApiKeySecuritySchemeTransformer>();
 
+builder.Services.AddScoped<IValidator<WeatherForecastRequest>, ForecastRequestValidator>();
+
+builder.Services.AddApplicationInsightsTelemetry();
+
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+builder.Services.AddHealthChecks()
+    .AddRedis(redisConnectionString!);
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnectionString;
+    options.InstanceName = "WeatherForecast";
 });
+
+builder.Services.AddOpenApi(options => { options.AddDocumentTransformer<ApiKeySecuritySchemeTransformer>(); });
 
 var app = builder.Build();
 
@@ -33,12 +47,8 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "v1");
-    });
+    app.UseSwaggerUI(options => { options.SwaggerEndpoint("/openapi/v1.json", "v1"); });
 }
-
 
 app.UseRateLimiter();
 app.UseHttpsRedirection();
@@ -53,7 +63,8 @@ app.Run();
 
 internal sealed class ApiKeySecuritySchemeTransformer : IOpenApiDocumentTransformer
 {
-    public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
+    public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context,
+        CancellationToken cancellationToken)
     {
         document.Components ??= new OpenApiComponents();
         document.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>
@@ -66,7 +77,8 @@ internal sealed class ApiKeySecuritySchemeTransformer : IOpenApiDocumentTransfor
             }
         };
 
-        document.Security = [
+        document.Security =
+        [
             new OpenApiSecurityRequirement
             {
                 {
@@ -78,19 +90,6 @@ internal sealed class ApiKeySecuritySchemeTransformer : IOpenApiDocumentTransfor
 
         document.SetReferenceHostDocument();
 
-        return Task.CompletedTask;
-    }
-}
-
-internal sealed class ApiKeyOperationTransformer : IOpenApiOperationTransformer
-{
-    public Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
-    {
-        operation.Security ??= [];
-        operation.Security.Add(new OpenApiSecurityRequirement
-        {
-            [new OpenApiSecuritySchemeReference("ApiKey")] = []
-        });
         return Task.CompletedTask;
     }
 }

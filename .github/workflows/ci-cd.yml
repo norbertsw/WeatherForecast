@@ -1,0 +1,168 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  AZURE_RESOURCE_GROUP: "weatherforecast-prod-rg"
+  IMAGE_NAME: "weatherforecast-api"
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore WeatherForecast.slnx
+
+      - name: Build
+        run: dotnet build WeatherForecast.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test WeatherForecast.slnx --no-build --configuration Release --verbosity normal
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: build-and-test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      acr-name: ${{ steps.bicep.outputs.acrName }}
+      acr-login-server: ${{ steps.bicep.outputs.acrLoginServer }}
+      app-service-name: ${{ steps.bicep.outputs.appServiceName }}
+      app-service-url: ${{ steps.bicep.outputs.appServiceUrl }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Resource Group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az group create \
+              --name ${{ env.AZURE_RESOURCE_GROUP }} \
+              --location westeurope \
+              --tags application=weatherforecast environment=prod managedBy=bicep
+
+      - name: Deploy Bicep
+        id: bicep
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: infrastructure/main.bicep
+          parameters: >
+            infrastructure/main.bicepparam
+            apiKey=${{ secrets.API_KEY }}
+          failOnStdErr: true
+          scope: resourcegroup
+
+  build-and-push-image:
+    name: Build & Push Image
+    needs: deploy-infrastructure
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.build.outputs.image-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ needs.deploy-infrastructure.outputs.acr-name }}
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          ACR_LOGIN_SERVER="${{ needs.deploy-infrastructure.outputs.acr-login-server }}"
+          IMAGE_SHA="${ACR_LOGIN_SERVER}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_LATEST="${ACR_LOGIN_SERVER}/${{ env.IMAGE_NAME }}:latest"
+
+          docker build \
+            -t "${IMAGE_SHA}" \
+            -t "${IMAGE_LATEST}" \
+            -f WeatherForecast.Api/Dockerfile .
+
+          docker push "${IMAGE_SHA}"
+          docker push "${IMAGE_LATEST}"
+
+          echo "image-tag=${IMAGE_SHA}" >> "$GITHUB_OUTPUT"
+
+  # ==========================================================================
+  # Deploy Application - master push only
+  # ==========================================================================
+  deploy-app:
+    name: Deploy Application
+    needs: [deploy-infrastructure, build-and-push-image]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az webapp config container set \
+              --name ${{ needs.deploy-infrastructure.outputs.app-service-name }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --container-image-name ${{ needs.build-and-push-image.outputs.image-tag }} \
+              --container-registry-url https://${{ needs.deploy-infrastructure.outputs.acr-login-server }}
+
+      - name: Restart and verify health
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="${{ needs.deploy-infrastructure.outputs.app-service-name }}"
+            APP_URL="${{ needs.deploy-infrastructure.outputs.app-service-url }}"
+
+            az webapp restart --name "${APP_NAME}" --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+
+            echo "Waiting for application to start..."
+            sleep 30
+
+            for i in 1 2 3 4 5; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${APP_URL}/healthz" || echo "000")
+              echo "Attempt ${i}: Health check returned ${STATUS}"
+              if [ "${STATUS}" = "200" ]; then
+                echo "Application is healthy!"
+                exit 0
+              fi
+              sleep 15
+            done
+
+            echo "::error::Health check failed after 5 attempts"
+            exit 1
