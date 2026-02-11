@@ -80,7 +80,7 @@ internal sealed class AccuWeatherClient(
 
     private async Task<string?> GetLocationKeyAsync(string city, string countryCode, CancellationToken ct)
     {
-        var cacheKey = $"accu-loc:{city}:{countryCode}";
+        var cacheKey = $"accu-loc:{city.ToUpperInvariant()}:{countryCode}";
         var cached = await cache.GetStringAsync(cacheKey, ct);
 
         if (cached is not null)

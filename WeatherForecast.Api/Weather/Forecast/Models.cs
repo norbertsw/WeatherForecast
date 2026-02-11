@@ -3,10 +3,19 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace WeatherForecast.Api.Weather.Forecast;
 
-public sealed record WeatherForecastRequest(
-    [FromQuery] string City,
-    [FromQuery] string CountryCode,
-    [FromQuery] DateOnly Date);
+public sealed record WeatherForecastRequest
+{
+    [FromQuery] public required string City { get; init; }
+
+    [FromQuery]
+    public required string CountryCode
+    {
+        get;
+        init => field = value.ToUpperInvariant();
+    }
+
+    [FromQuery] public required DateOnly Date { get; init; }
+}
 
 public sealed record WeatherForecastResponse
 {

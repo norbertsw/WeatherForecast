@@ -9,7 +9,7 @@ public static class ForecastHandler
 {
     private static readonly DistributedCacheEntryOptions CacheOptions = new()
     {
-        SlidingExpiration = TimeSpan.FromMinutes(20)
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(20)
     };
 
     public static async Task<WeatherForecastResponse> HandleAsync(
@@ -20,7 +20,7 @@ public static class ForecastHandler
         ILogger logger,
         CancellationToken ct = default)
     {
-        var cacheKey = $"{request.City}:{request.CountryCode}:{request.Date:yyyy-MM-dd}";
+        var cacheKey = $"{request.City.ToUpperInvariant()}:{request.CountryCode}:{request.Date:yyyy-MM-dd}";
 
         var weatherForecastResponse = await RetrieveCachedWeatherForecast(cacheKey, cache, logger, ct);
         if (weatherForecastResponse is not null)
