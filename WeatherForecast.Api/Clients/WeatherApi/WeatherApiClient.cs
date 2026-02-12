@@ -55,7 +55,7 @@ internal sealed class WeatherApiClient(
         var apiKey = options.Value.ApiKey;
         var query = Uri.EscapeDataString($"{city},{countryCode}");
 
-        using var httpResponse = await httpClient.GetAsync($"v1/forecast.json?key={apiKey}&q={query}&days=5", ct);
+        using var httpResponse = await httpClient.GetAsync($"v1/forecast.json?key={apiKey}&q={query}&days=6", ct);
 
         httpResponse.EnsureSuccessStatusCode();
 

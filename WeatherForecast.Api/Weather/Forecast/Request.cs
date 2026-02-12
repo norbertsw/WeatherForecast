@@ -25,7 +25,7 @@ public class ForecastRequestValidator : AbstractValidator<WeatherForecastRequest
         RuleFor(x => x.Date).NotNull().Must(date =>
             {
                 var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().Date);
-                return date >= today && date <= today.AddDays(5);
+                return date >= today.AddDays(-1) && date <= today.AddDays(6);
             })
             .WithMessage("Date must be between today and 5 days from now");
 

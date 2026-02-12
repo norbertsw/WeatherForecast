@@ -79,10 +79,16 @@ internal sealed class AccuWeatherClient(
     private async Task<string?> GetLocationKeyAsync(string city, string countryCode, CancellationToken ct)
     {
         var cacheKey = $"accu-loc:{city.ToUpperInvariant()}:{countryCode}";
-        var cached = await cache.GetStringAsync(cacheKey, ct);
-
-        if (cached is not null)
-            return cached;
+        try
+        {
+            var cached = await cache.GetStringAsync(cacheKey, ct);
+            if (cached is not null)
+                return cached;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to retrieve location key from cache for {City}, {CountryCode}", city, countryCode);
+        }
 
         using var httpResponse = await httpClient
             .GetAsync($"/locations/v1/cities/search?q={Uri.EscapeDataString(city)}&countryCode={Uri.EscapeDataString(countryCode)}", ct);
@@ -97,7 +103,14 @@ internal sealed class AccuWeatherClient(
         }
 
         var locationKey = locations[0].Key;
-        await cache.SetStringAsync(cacheKey, locationKey, LocationCacheOptions, ct);
+        try
+        {
+            await cache.SetStringAsync(cacheKey, locationKey, LocationCacheOptions, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to cache location key for {City}, {CountryCode}", city, countryCode);
+        }
 
         return locationKey;
     }
