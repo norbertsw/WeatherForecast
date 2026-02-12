@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using AutoFixture;
@@ -45,22 +44,27 @@ public class ForecastHandlerTests
         };
     }
 
-    private Mock<IWeatherClient> CreateMockClient(string? sourceName = null, ForecastSourceDto? result = null)
+    private Mock<IWeatherClient> CreateSuccessClient(string sourceName)
     {
         var client = new Mock<IWeatherClient>();
-        client.Setup(c => c.SourceName).Returns(sourceName ?? _fixture.Create<string>());
+        client.Setup(c => c.SourceName).Returns(sourceName);
         client.Setup(c => c.GetForecastAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(result);
+            .ReturnsAsync(ForecastSourceDto.Success(sourceName, _fixture.Create<ForecastDto>()));
+        return client;
+    }
+
+    private static Mock<IWeatherClient> CreateFailureClient(string sourceName)
+    {
+        var client = new Mock<IWeatherClient>();
+        client.Setup(c => c.SourceName).Returns(sourceName);
+        client.Setup(c => c.GetForecastAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ForecastSourceDto.Failure(sourceName, "Failed to fetch forecast"));
         return client;
     }
 
     private ForecastSourceDto CreateForecastSourceResponse(string? source = null)
     {
-        return new ForecastSourceDto
-        {
-            Source = source ?? _fixture.Create<string>(),
-            Forecast = _fixture.Create<ForecastDto>()
-        };
+        return ForecastSourceDto.Success(source ?? _fixture.Create<string>(), _fixture.Create<ForecastDto>());
     }
 
     private void SetupCacheHit(string cacheKey, WeatherForecastResponse response)
@@ -84,7 +88,7 @@ public class ForecastHandlerTests
             Metadata = new MetadataDto { GeneratedAt = _timeProvider.GetUtcNow() }
         };
         SetupCacheHit(cacheKey, cachedResponse);
-        var mockClient = CreateMockClient("AccuWeather");
+        var mockClient = CreateSuccessClient("AccuWeather");
 
         // Act
         var result = await ForecastHandler.HandleAsync(
@@ -105,9 +109,9 @@ public class ForecastHandlerTests
         var request = CreateRequest();
         var clients = new[]
         {
-            CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")),
-            CreateMockClient("WeatherAPI", CreateForecastSourceResponse("WeatherAPI")),
-            CreateMockClient("VisualCrossing", CreateForecastSourceResponse("VisualCrossing"))
+            CreateSuccessClient("AccuWeather"),
+            CreateSuccessClient("WeatherAPI"),
+            CreateSuccessClient("VisualCrossing")
         };
 
         // Act
@@ -117,21 +121,24 @@ public class ForecastHandlerTests
         // Assert
         result.ShouldSatisfyAllConditions(
             () => result.Forecasts.Count.ShouldBe(3),
-            () => clients[0].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()), Times.Once),
-            () => clients[1].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()), Times.Once),
-            () => clients[2].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()), Times.Once));
+            () => clients[0].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()),
+                Times.Once),
+            () => clients[1].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()),
+                Times.Once),
+            () => clients[2].Verify(c => c.GetForecastAsync(request.City, request.CountryCode, request.Date, It.IsAny<CancellationToken>()),
+                Times.Once));
     }
 
     [Fact]
-    public async Task HandleAsync_WhenAllClientsReturnNull_ReturnsEmptyForecasts()
+    public async Task HandleAsync_WhenAllClientsFail_ReturnsAllAsUnavailable()
     {
         // Arrange
         var request = CreateRequest();
         var clients = new[]
         {
-            CreateMockClient("AccuWeather"),
-            CreateMockClient("WeatherAPI"),
-            CreateMockClient("VisualCrossing")
+            CreateFailureClient("AccuWeather"),
+            CreateFailureClient("WeatherAPI"),
+            CreateFailureClient("VisualCrossing")
         };
 
         // Act
@@ -139,19 +146,21 @@ public class ForecastHandlerTests
             request, _cache.Object, clients.Select(c => c.Object), _timeProvider, _logger, TestContext.Current.CancellationToken);
 
         // Assert
-        result.Forecasts.ShouldBeEmpty();
+        result.ShouldSatisfyAllConditions(
+            () => result.Forecasts.Count.ShouldBe(3),
+            () => result.Forecasts.ShouldAllBe(f => !f.IsAvailable));
     }
 
     [Fact]
-    public async Task HandleAsync_WhenSomeClientsReturnNull_ReturnsOnlySuccessfulForecasts()
+    public async Task HandleAsync_WhenSomeClientsFail_ReturnsAllResults()
     {
         // Arrange
         var request = CreateRequest();
         var clients = new[]
         {
-            CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")),
-            CreateMockClient("WeatherAPI"),
-            CreateMockClient("VisualCrossing", CreateForecastSourceResponse("VisualCrossing"))
+            CreateSuccessClient("AccuWeather"),
+            CreateFailureClient("WeatherAPI"),
+            CreateSuccessClient("VisualCrossing")
         };
 
         // Act
@@ -159,7 +168,10 @@ public class ForecastHandlerTests
             request, _cache.Object, clients.Select(c => c.Object), _timeProvider, _logger, TestContext.Current.CancellationToken);
 
         // Assert
-        result.Forecasts.Count.ShouldBe(2);
+        result.ShouldSatisfyAllConditions(
+            () => result.Forecasts.Count.ShouldBe(3),
+            () => result.Forecasts.Count(f => f.IsAvailable).ShouldBe(2),
+            () => result.Forecasts.Count(f => !f.IsAvailable).ShouldBe(1));
     }
 
     [Fact]
@@ -167,7 +179,7 @@ public class ForecastHandlerTests
     {
         // Arrange
         var request = CreateRequest("London", "GB");
-        var clients = new[] { CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")) };
+        var clients = new[] { CreateSuccessClient("AccuWeather") };
 
         // Act
         await ForecastHandler.HandleAsync(
@@ -187,7 +199,7 @@ public class ForecastHandlerTests
     {
         // Arrange
         var request = CreateRequest("london", "GB");
-        var clients = new[] { CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")) };
+        var clients = new[] { CreateSuccessClient("AccuWeather") };
 
         // Act
         await ForecastHandler.HandleAsync(
@@ -208,7 +220,7 @@ public class ForecastHandlerTests
         var request = CreateRequest();
         _cache.Setup(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Cache unavailable"));
-        var mockClient = CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather"));
+        var mockClient = CreateSuccessClient("AccuWeather");
         var logger = new Mock<ILogger>();
 
         // Act
@@ -224,14 +236,14 @@ public class ForecastHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_WhenCacheWriteFails_ReturnsResponseAnyway()
+    public async Task HandleAsync_WhenCacheWriteFails_ReturnsResponse()
     {
         // Arrange
         var request = CreateRequest();
         _cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<DistributedCacheEntryOptions>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Cache write failed"));
-        var clients = new[] { CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")) };
+        var clients = new[] { CreateSuccessClient("AccuWeather") };
         var logger = new Mock<ILogger>();
 
         // Act
@@ -250,7 +262,7 @@ public class ForecastHandlerTests
     {
         // Arrange
         var request = CreateRequest();
-        var clients = new[] { CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")) };
+        var clients = new[] { CreateSuccessClient("AccuWeather") };
 
         // Act
         var result = await ForecastHandler.HandleAsync(
@@ -267,7 +279,7 @@ public class ForecastHandlerTests
         var city = _fixture.Create<string>();
         var countryCode = "FR";
         var request = CreateRequest(city, countryCode);
-        var clients = new[] { CreateMockClient("AccuWeather", CreateForecastSourceResponse("AccuWeather")) };
+        var clients = new[] { CreateSuccessClient("AccuWeather") };
 
         // Act
         var result = await ForecastHandler.HandleAsync(
@@ -280,15 +292,15 @@ public class ForecastHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_DoesNotCacheWhenNoResults()
+    public async Task HandleAsync_DoesNotCacheWhenAllClientsFail()
     {
         // Arrange
-        var request = CreateRequest();
+        var request = CreateRequest("London", "GB");
         var clients = new[]
         {
-            CreateMockClient("AccuWeather"),
-            CreateMockClient("WeatherAPI"),
-            CreateMockClient("VisualCrossing")
+            CreateFailureClient("AccuWeather"),
+            CreateFailureClient("WeatherAPI"),
+            CreateFailureClient("VisualCrossing")
         };
 
         // Act

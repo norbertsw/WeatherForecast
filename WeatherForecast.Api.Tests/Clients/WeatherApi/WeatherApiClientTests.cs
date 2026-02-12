@@ -105,21 +105,22 @@ public class WeatherApiClientTests
 
         // Assert
         var expected = response.Forecast.ForecastDay[0];
-        result.ShouldNotBeNull();
+        result.IsAvailable.ShouldBeTrue();
+        result.Forecast.ShouldNotBeNull();
         result.ShouldSatisfyAllConditions(
             () => result.Source.ShouldBe("WeatherAPI"),
-            () => result.Forecast.MaxTempC.ShouldBe(expected.Day.MaxTempC),
-            () => result.Forecast.MinTempC.ShouldBe(expected.Day.MinTempC),
-            () => result.Forecast.AvgTempC.ShouldBe(expected.Day.AvgTempC),
-            () => result.Forecast.Condition.ShouldBe(expected.Day.Condition.Text),
-            () => result.Forecast.Humidity.ShouldBe(expected.Day.AvgHumidity),
-            () => result.Forecast.WindSpeedKmh.ShouldBe(expected.Day.MaxWindKph),
-            () => result.Forecast.PrecipitationMm.ShouldBe(expected.Day.TotalPrecipMm),
-            () => result.Forecast.PrecipitationChance.ShouldBe(expected.Day.DailyChanceOfRain));
+            () => result.Forecast!.MaxTempC.ShouldBe(expected.Day.MaxTempC),
+            () => result.Forecast!.MinTempC.ShouldBe(expected.Day.MinTempC),
+            () => result.Forecast!.AvgTempC.ShouldBe(expected.Day.AvgTempC),
+            () => result.Forecast!.Condition.ShouldBe(expected.Day.Condition.Text),
+            () => result.Forecast!.Humidity.ShouldBe(expected.Day.AvgHumidity),
+            () => result.Forecast!.WindSpeedKmh.ShouldBe(expected.Day.MaxWindKph),
+            () => result.Forecast!.PrecipitationMm.ShouldBe(expected.Day.TotalPrecipMm),
+            () => result.Forecast!.PrecipitationChance.ShouldBe(expected.Day.DailyChanceOfRain));
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenNoMatchingDate_ReturnsNull()
+    public async Task GetForecastAsync_WhenNoMatchingDate_ReturnsFailure()
     {
         // Arrange
         SetupHttpResponse(CreateForecastResponse(_date.AddDays(1)));
@@ -128,11 +129,14 @@ public class WeatherApiClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenForecastDaysEmpty_ReturnsNull()
+    public async Task GetForecastAsync_WhenForecastDaysEmpty_ReturnsFailure()
     {
         // Arrange
         SetupHttpResponse(new WeatherApiForecastResponse(new WeatherApiForecast([])));
@@ -141,11 +145,14 @@ public class WeatherApiClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenHttpFails_ReturnsNull()
+    public async Task GetForecastAsync_WhenHttpFails_ReturnsFailure()
     {
         // Arrange
         SetupHttpFailure();
@@ -154,7 +161,10 @@ public class WeatherApiClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]

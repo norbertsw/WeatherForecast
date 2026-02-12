@@ -30,7 +30,7 @@ public static class ForecastHandler
 
         var response = CreateWeatherForecastResponse(request, apiResults, timeProvider);
 
-        if (!apiResults.IsEmpty)
+        if (apiResults.Any(r => r.IsAvailable))
             await CacheForecastResponseAsync(response, cacheKey, cache, logger, ct);
 
         return response;
@@ -61,7 +61,7 @@ public static class ForecastHandler
         }
     }
 
-    private static async Task<ConcurrentBag<ForecastSourceDto>> FetchWeatherForecastDataAsync(WeatherForecastRequest request,
+    private static async Task<IReadOnlyCollection<ForecastSourceDto>> FetchWeatherForecastDataAsync(WeatherForecastRequest request,
         IEnumerable<IWeatherClient> weatherClients,
         CancellationToken ct)
     {
@@ -69,8 +69,7 @@ public static class ForecastHandler
         await Parallel.ForEachAsync(weatherClients, ct, async (client, token) =>
         {
             var result = await client.GetForecastAsync(request.City, request.CountryCode, request.Date, token);
-            if (result is not null)
-                apiResults.Add(result);
+            apiResults.Add(result);
         });
 
         return apiResults;

@@ -16,18 +16,18 @@ internal sealed class AccuWeatherClient(
 
     public string SourceName => "AccuWeather";
 
-    public async Task<ForecastSourceDto?> GetForecastAsync(string city, string countryCode, DateOnly date,
+    public async Task<ForecastSourceDto> GetForecastAsync(string city, string countryCode, DateOnly date,
         CancellationToken ct = default)
     {
         try
         {
             var locationKey = await GetLocationKeyAsync(city, countryCode, ct);
             if (locationKey is null)
-                return null;
+                return ForecastSourceDto.Failure(SourceName, "City not found");
 
             var response = await FetchDailyForecastAsync(locationKey, ct);
             if (response?.DailyForecasts is null or { Count: 0 })
-                return null;
+                return ForecastSourceDto.Failure(SourceName, "No forecast found for the requested city");
 
             var dateString = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var matchingDay = response.DailyForecasts
@@ -35,12 +35,12 @@ internal sealed class AccuWeatherClient(
 
             return matchingDay is not null
                 ? MapToForecastSource(matchingDay)
-                : null;
+                : ForecastSourceDto.Failure(SourceName, "No forecast found for the requested date");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to fetch forecast from {Source}", SourceName);
-            return null;
+            return ForecastSourceDto.Failure(SourceName, "Failed to fetch forecast");
         }
     }
 
@@ -51,22 +51,20 @@ internal sealed class AccuWeatherClient(
         var avgTemp = (minTemp + maxTemp) / 2.0;
         var avgFeelsLike = (matchingDay.RealFeelTemperature.Minimum.Value + matchingDay.RealFeelTemperature.Maximum.Value) / 2.0;
 
-        return new ForecastSourceDto
+        var forecastDto = new ForecastDto
         {
-            Source = SourceName,
-            Forecast = new ForecastDto
-            {
-                MaxTempC = maxTemp,
-                MinTempC = minTemp,
-                AvgTempC = avgTemp,
-                AvgFeelsLikeC = avgFeelsLike,
-                Condition = matchingDay.Day?.IconPhrase,
-                Humidity = matchingDay.Day?.RelativeHumidity.Average ?? 0,
-                WindSpeedKmh = matchingDay.Day?.Wind?.Speed.Value ?? 0,
-                PrecipitationMm = matchingDay.Day?.TotalLiquid?.Value ?? 0,
-                PrecipitationChance = matchingDay.Day?.PrecipitationProbability
-            }
+            MaxTempC = maxTemp,
+            MinTempC = minTemp,
+            AvgTempC = avgTemp,
+            AvgFeelsLikeC = avgFeelsLike,
+            Condition = matchingDay.Day?.IconPhrase,
+            Humidity = matchingDay.Day?.RelativeHumidity.Average ?? 0,
+            WindSpeedKmh = matchingDay.Day?.Wind?.Speed.Value ?? 0,
+            PrecipitationMm = matchingDay.Day?.TotalLiquid?.Value ?? 0,
+            PrecipitationChance = matchingDay.Day?.PrecipitationProbability
         };
+
+        return ForecastSourceDto.Success(SourceName, forecastDto);
     }
 
     private async Task<AccuWeatherForecastResponse?> FetchDailyForecastAsync(string locationKey, CancellationToken ct)

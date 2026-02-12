@@ -17,7 +17,15 @@ public sealed record LocationDto
 public sealed record ForecastSourceDto
 {
     public required string Source { get; init; }
-    public required ForecastDto Forecast { get; init; }
+    public required bool IsAvailable { get; init; }
+    public ForecastDto? Forecast { get; init; }
+    public string? ErrorMessage { get; init; }
+
+    public static ForecastSourceDto Success(string source, ForecastDto forecast)
+        => new() { Source = source, IsAvailable = true, Forecast = forecast };
+
+    public static ForecastSourceDto Failure(string source, string errorMessage)
+        => new() { Source = source, IsAvailable = false, ErrorMessage = errorMessage };
 }
 
 public sealed record ForecastDto

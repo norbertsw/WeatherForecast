@@ -11,7 +11,7 @@ internal sealed class VisualCrossingClient(
 {
     public string SourceName => "VisualCrossing";
 
-    public async Task<ForecastSourceDto?> GetForecastAsync(string city, string countryCode, DateOnly date, CancellationToken ct)
+    public async Task<ForecastSourceDto> GetForecastAsync(string city, string countryCode, DateOnly date, CancellationToken ct)
     {
         try
         {
@@ -19,29 +19,25 @@ internal sealed class VisualCrossingClient(
 
             var matchingDay = response?.Days.FirstOrDefault();
             if (matchingDay is null)
-                return null;
+                return ForecastSourceDto.Failure(SourceName, "No forecast found for the requested date");
 
-            return new ForecastSourceDto
+            return ForecastSourceDto.Success(SourceName, new ForecastDto
             {
-                Source = SourceName,
-                Forecast = new ForecastDto
-                {
-                    MaxTempC = matchingDay.Tempmax,
-                    MinTempC = matchingDay.Tempmin,
-                    AvgTempC = matchingDay.Temp,
-                    Condition = matchingDay.Conditions,
-                    Humidity = (int)matchingDay.Humidity,
-                    WindSpeedKmh = matchingDay.Windspeed,
-                    PrecipitationMm = matchingDay.Precip ?? 0,
-                    PrecipitationChance = null,
-                    AvgFeelsLikeC = null
-                }
-            };
+                MaxTempC = matchingDay.Tempmax,
+                MinTempC = matchingDay.Tempmin,
+                AvgTempC = matchingDay.Temp,
+                Condition = matchingDay.Conditions,
+                Humidity = (int)matchingDay.Humidity,
+                WindSpeedKmh = matchingDay.Windspeed,
+                PrecipitationMm = matchingDay.Precip ?? 0,
+                PrecipitationChance = null,
+                AvgFeelsLikeC = null
+            });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to fetch forecast from {Source}", SourceName);
-            return null;
+            return ForecastSourceDto.Failure(SourceName, "Failed to fetch forecast");
         }
     }
 

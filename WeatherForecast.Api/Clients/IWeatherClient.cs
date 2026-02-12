@@ -6,7 +6,7 @@ public interface IWeatherClient
 {
     string SourceName { get; }
 
-    Task<ForecastSourceDto?> GetForecastAsync(
+    Task<ForecastSourceDto> GetForecastAsync(
         string city,
         string countryCode,
         DateOnly date,

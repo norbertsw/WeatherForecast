@@ -125,16 +125,17 @@ public class AccuWeatherClientTests
 
         // Assert
         var expected = response.DailyForecasts[0];
-        result.ShouldNotBeNull();
         result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeTrue(),
+            () => result.Forecast.ShouldNotBeNull(),
             () => result.Source.ShouldBe("AccuWeather"),
-            () => result.Forecast.MaxTempC.ShouldBe(expected.Temperature.Maximum.Value),
-            () => result.Forecast.MinTempC.ShouldBe(expected.Temperature.Minimum.Value),
-            () => result.Forecast.Condition.ShouldBe(expected.Day!.IconPhrase),
-            () => result.Forecast.Humidity.ShouldBe(expected.Day!.RelativeHumidity.Average),
-            () => result.Forecast.WindSpeedKmh.ShouldBe(expected.Day!.Wind!.Speed.Value),
-            () => result.Forecast.PrecipitationMm.ShouldBe(expected.Day!.TotalLiquid!.Value),
-            () => result.Forecast.PrecipitationChance.ShouldBe(expected.Day!.PrecipitationProbability));
+            () => result.Forecast!.MaxTempC.ShouldBe(expected.Temperature.Maximum.Value),
+            () => result.Forecast!.MinTempC.ShouldBe(expected.Temperature.Minimum.Value),
+            () => result.Forecast!.Condition.ShouldBe(expected.Day!.IconPhrase),
+            () => result.Forecast!.Humidity.ShouldBe(expected.Day!.RelativeHumidity.Average),
+            () => result.Forecast!.WindSpeedKmh.ShouldBe(expected.Day!.Wind!.Speed.Value),
+            () => result.Forecast!.PrecipitationMm.ShouldBe(expected.Day!.TotalLiquid!.Value),
+            () => result.Forecast!.PrecipitationChance.ShouldBe(expected.Day!.PrecipitationProbability));
     }
 
     [Fact]
@@ -149,7 +150,7 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result!.Forecast.AvgTempC.ShouldBe(15.0);
+        result.Forecast!.AvgTempC.ShouldBe(15.0);
     }
 
     [Fact]
@@ -164,8 +165,8 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldNotBeNull();
-        result.Forecast.AvgFeelsLikeC.ShouldBe(13.0);
+        result.IsAvailable.ShouldBeTrue();
+        result.Forecast!.AvgFeelsLikeC.ShouldBe(13.0);
     }
 
     [Fact]
@@ -224,7 +225,7 @@ public class AccuWeatherClientTests
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenLocationSearchReturnsEmpty_ReturnsNull()
+    public async Task GetForecastAsync_WhenLocationSearchReturnsEmpty_ReturnsFailure()
     {
         // Arrange
         SetupCacheMiss();
@@ -234,11 +235,14 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenNoMatchingDate_ReturnsNull()
+    public async Task GetForecastAsync_WhenNoMatchingDate_ReturnsFailure()
     {
         // Arrange
         SetupLocationCacheHit("London", "GB", _fixture.Create<string>());
@@ -248,11 +252,14 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenHttpCallFails_ReturnsNull()
+    public async Task GetForecastAsync_WhenHttpCallFails_ReturnsFailure()
     {
         // Arrange
         SetupCacheMiss();
@@ -262,11 +269,14 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenExceptionThrown_ReturnsNull()
+    public async Task GetForecastAsync_WhenExceptionThrown_ReturnsFailure()
     {
         // Arrange
         SetupCacheMiss();
@@ -281,6 +291,9 @@ public class AccuWeatherClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 }

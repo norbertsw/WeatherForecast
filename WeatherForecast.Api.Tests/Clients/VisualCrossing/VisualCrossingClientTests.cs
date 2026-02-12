@@ -92,20 +92,21 @@ public class VisualCrossingClientTests
 
         // Assert
         var expected = response.Days[0];
-        result.ShouldNotBeNull();
+        result.IsAvailable.ShouldBeTrue();
+        result.Forecast.ShouldNotBeNull();
         result.ShouldSatisfyAllConditions(
             () => result.Source.ShouldBe("VisualCrossing"),
-            () => result.Forecast.MaxTempC.ShouldBe(expected.Tempmax),
-            () => result.Forecast.MinTempC.ShouldBe(expected.Tempmin),
-            () => result.Forecast.AvgTempC.ShouldBe(expected.Temp),
-            () => result.Forecast.Condition.ShouldBe(expected.Conditions),
-            () => result.Forecast.WindSpeedKmh.ShouldBe(expected.Windspeed),
-            () => result.Forecast.PrecipitationChance.ShouldBeNull(),
-            () => result.Forecast.AvgFeelsLikeC.ShouldBeNull());
+            () => result.Forecast!.MaxTempC.ShouldBe(expected.Tempmax),
+            () => result.Forecast!.MinTempC.ShouldBe(expected.Tempmin),
+            () => result.Forecast!.AvgTempC.ShouldBe(expected.Temp),
+            () => result.Forecast!.Condition.ShouldBe(expected.Conditions),
+            () => result.Forecast!.WindSpeedKmh.ShouldBe(expected.Windspeed),
+            () => result.Forecast!.PrecipitationChance.ShouldBeNull(),
+            () => result.Forecast!.AvgFeelsLikeC.ShouldBeNull());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenDaysEmpty_ReturnsNull()
+    public async Task GetForecastAsync_WhenDaysEmpty_ReturnsFailure()
     {
         // Arrange
         SetupHttpResponse(new VisualCrossingResponse([]));
@@ -114,11 +115,14 @@ public class VisualCrossingClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
-    public async Task GetForecastAsync_WhenHttpFails_ReturnsNull()
+    public async Task GetForecastAsync_WhenHttpFails_ReturnsFailure()
     {
         // Arrange
         SetupHttpFailure();
@@ -127,7 +131,10 @@ public class VisualCrossingClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldBeNull();
+        result.ShouldSatisfyAllConditions(
+            () => result.IsAvailable.ShouldBeFalse(),
+            () => result.Forecast.ShouldBeNull(),
+            () => result.ErrorMessage.ShouldNotBeNullOrEmpty());
     }
 
     [Fact]
@@ -145,12 +152,13 @@ public class VisualCrossingClientTests
         var result = await _sut.GetForecastAsync("London", "GB", _date, TestContext.Current.CancellationToken);
 
         // Assert
-        result.ShouldNotBeNull();
+        result.IsAvailable.ShouldBeTrue();
+        result.Forecast.ShouldNotBeNull();
         result.Forecast.ShouldSatisfyAllConditions(
-            () => result.Forecast.MinTempC.ShouldBe(firstDay.Tempmin),
-            () => result.Forecast.AvgTempC.ShouldBe(firstDay.Temp),
-            () => result.Forecast.MaxTempC.ShouldBe(firstDay.Tempmax),
-            () => result.Forecast.Condition.ShouldBe(firstDay.Conditions));
+            () => result.Forecast!.MinTempC.ShouldBe(firstDay.Tempmin),
+            () => result.Forecast!.AvgTempC.ShouldBe(firstDay.Temp),
+            () => result.Forecast!.MaxTempC.ShouldBe(firstDay.Tempmax),
+            () => result.Forecast!.Condition.ShouldBe(firstDay.Conditions));
     }
 
     [Fact]
