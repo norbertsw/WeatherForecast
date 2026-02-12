@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="WeatherForecast.Api/WeatherForecast.Api.csproj" />
+  <Project Path="WeatherForecast.Api.Tests/WeatherForecast.Api.Tests.csproj" />
+  <Project Path="WeatherForecast.Api.IntegrationTests/WeatherForecast.Api.IntegrationTests.csproj" />
 </Solution>

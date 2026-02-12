@@ -20,4 +20,9 @@
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="WeatherForecast.Api.Tests" />
+    <InternalsVisibleTo Include="WeatherForecast.Api.IntegrationTests" />
+  </ItemGroup>
+
 </Project>

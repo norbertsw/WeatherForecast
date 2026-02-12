@@ -8,9 +8,11 @@ using WeatherForecast.Api.Weather.Forecast;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddAzureKeyVault(
-    new Uri(builder.Configuration["KeyVaultUri"]!),
-    new DefaultAzureCredential());
+var keyVaultUri = builder.Configuration["KeyVaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+}
 
 builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(options =>
