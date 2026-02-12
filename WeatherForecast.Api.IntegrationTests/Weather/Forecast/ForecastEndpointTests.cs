@@ -99,7 +99,7 @@ public class ForecastEndpointTests : IClassFixture<WeatherForecastApiFactory>
     public async Task GetForecast_WithDateInPast_ReturnsValidationProblem()
     {
         // Arrange
-        var futureDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var futureDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
         var request = new HttpRequestMessage(HttpMethod.Get, BuildForecastUrl(date: futureDate));
         request.Headers.Add("X-Api-Key", "test-api-key");
 

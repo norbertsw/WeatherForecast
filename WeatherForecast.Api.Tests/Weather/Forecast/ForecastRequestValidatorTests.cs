@@ -125,10 +125,23 @@ public class ForecastRequestValidatorTests
     }
 
     [Fact]
-    public async Task Validate_DateInThePast_IsInvalid()
+    public async Task Validate_DateYesterday_IsValid_DueToTimezoneOffset()
+    {
+        // Arrange — yesterday relative to UTC is valid because it may still be "today" in western time zones
+        var request = CreateValidRequest(_today.AddDays(-1));
+
+        // Act
+        var result = await _sut.ValidateAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_DateTwoDaysInThePast_IsInvalid()
     {
         // Arrange
-        var request = CreateValidRequest(_today.AddDays(-1));
+        var request = CreateValidRequest(_today.AddDays(-2));
 
         // Act
         var result = await _sut.ValidateAsync(request, TestContext.Current.CancellationToken);
@@ -140,10 +153,10 @@ public class ForecastRequestValidatorTests
     }
 
     [Fact]
-    public async Task Validate_DateMoreThan5DaysFromNow_IsInvalid()
+    public async Task Validate_DateMoreThan6DaysFromNow_IsInvalid()
     {
         // Arrange
-        var request = CreateValidRequest(_today.AddDays(6));
+        var request = CreateValidRequest(_today.AddDays(7));
 
         // Act
         var result = await _sut.ValidateAsync(request, TestContext.Current.CancellationToken);
@@ -152,6 +165,19 @@ public class ForecastRequestValidatorTests
         result.ShouldSatisfyAllConditions(
             () => result.IsValid.ShouldBeFalse(),
             () => result.Errors.ShouldContain(e => e.PropertyName == "Date"));
+    }
+
+    [Fact]
+    public async Task Validate_DateExactly6DaysFromNow_IsValid_DueToTimezoneOffset()
+    {
+        // Arrange — 6 days from UTC "today" covers UTC+14 where it may already be "tomorrow"
+        var request = CreateValidRequest(_today.AddDays(6));
+
+        // Act
+        var result = await _sut.ValidateAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsValid.ShouldBeTrue();
     }
 
     [Fact]
