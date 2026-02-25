@@ -1,7 +1,7 @@
+using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Azure.Identity;
 using FluentValidation;
-using Microsoft.AspNetCore.RateLimiting;
 using WeatherForecast.Api.Clients;
 using WeatherForecast.Api.Weather;
 using WeatherForecast.Api.Weather.Forecast;
@@ -9,22 +9,22 @@ using WeatherForecast.Api.Weather.Forecast;
 var builder = WebApplication.CreateBuilder(args);
 
 var keyVaultUri = builder.Configuration["KeyVaultUri"];
-if (!string.IsNullOrEmpty(keyVaultUri))
-{
-    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
-}
+if (!string.IsNullOrEmpty(keyVaultUri)) builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
 
 builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddFixedWindowLimiter("fixed", opt =>
-    {
-        opt.PermitLimit = 15;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-    });
+    options.AddPolicy("per-api-key", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Request.Headers["X-Api-Key"].FirstOrDefault() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 15,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 builder.Services.AddApiVersioning(options =>
@@ -60,13 +60,13 @@ else
 var app = builder.Build();
 
 app.UseHttpsRedirection();
+app.UsePathBase(new PathString("/api"));
 app.UseRateLimiter();
 
 app.UseExceptionHandler();
 
 app.MapHealthChecks("/healthz");
 
-app.UsePathBase(new PathString("/api"));
 app.MapWeatherApi();
 
 app.Run();

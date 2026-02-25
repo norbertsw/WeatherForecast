@@ -14,7 +14,7 @@ public static class WeatherApi
             .Build();
 
         var group = app.MapGroup("/v{version:apiVersion}/weather")
-            .RequireRateLimiting("fixed")
+            .RequireRateLimiting("per-api-key")
             .AddEndpointFilter<ApiKeyEndpointFilter>()
             .WithApiVersionSet(versionSet)
             .MapToApiVersion(v1Api);
